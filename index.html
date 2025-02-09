@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <canvas id="layoutCanvas" width="600" height="320"></canvas>
+    <script>
+      const canvas = document.getElementById("layoutCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const memory = new WebAssembly.Memory({ initial: 256 });
+
+      const importObject = {
+        env: {
+          memory,
+          fill_rect: (x, y, width, height, color) => {
+            ctx.fillStyle = "#" + color.toString(16).padStart(6, "0");
+            ctx.fillRect(x, y, width, height);
+          },
+          sinf: Math.sin,
+          cosf: Math.cos,
+          print_line: (ptr) => {
+            const buffer = new Uint8Array(memory.buffer);
+            let str = "";
+            for (let i = ptr; buffer[i] !== 0; i++) {
+              str += String.fromCharCode(buffer[i]);
+            }
+            console.log(str);
+          },
+        },
+      };
+
+      WebAssembly.instantiateStreaming(fetch("./main.wasm"), importObject).then(
+        ({ instance }) => {
+          console.log("main.wasm loaded and instantiated");
+          const lib = instance.exports;
+
+          requestAnimationFrame(function draw(dt) {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            lib.on_render(canvas.width, canvas.height, dt);
+            requestAnimationFrame(draw);
+          });
+        }
+      );
+    </script>
+  </body>
+</html>
