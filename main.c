@@ -1,8 +1,5 @@
 // #define IMPORT(module, name) __attribute__((import_module(module), import_name(name)))
 
-// IMPORT("env", "cosf")
-// float cosf(float x);
-
 // IMPORT("env", "print_line")
 // double print_line(char *str);
 
@@ -89,6 +86,16 @@ void draw_rect(Arena *arena, Rect rect)
     *rect_ptr = rect;
 }
 
+int calculate_color(int cur_time, float phase_shift)
+{
+    float s = sinf((cur_time / 1000.0f) + phase_shift);
+    float t = (s + 1.0f) / 2.0f;
+    int red = (int)(t * 255.0f);
+    int green = (int)((1.0f - t) * 255.0f);
+    int blue = (phase_shift == 0) ? (int)(t * 255.0f) : 255;
+    return (red << 16) | (green << 8) | blue;
+}
+
 void on_render(int canvas_width, int canvas_height, int cur_time)
 {
     frameArena.offset = 0;
@@ -96,21 +103,9 @@ void on_render(int canvas_width, int canvas_height, int cur_time)
     float t = (sinf(cur_time / 1000.0f) + 1.0f) / 2.0f;
     int column_width = clamp(canvas_width * t, 0, canvas_width);
 
-    Rect column1 = {0, 0, column_width, canvas_height, 0};
-    float s1 = sinf(cur_time / 1000.0f);
-    float t1 = (s1 + 1.0f) / 2.0f;
-    int red1 = (int)((1.0f - t1) * 255.0f);
-    int green1 = (int)((1.0f - t1) * 255.0f);
-    int blue1 = (int)(t1 * 255.0f);
-    column1.color = (red1 << 16) | (green1 << 8) | blue1;
+    Rect column1 = {0, 0, column_width, canvas_height, calculate_color(cur_time, 0)};
     draw_rect(&frameArena, column1);
 
-    Rect column2 = {column_width, 0, canvas_width - column_width, canvas_height, 0};
-    float s2 = sinf((cur_time / 1000.0f) + 1.5708f);
-    float t2 = (s2 + 1.0f) / 2.0f;
-    int red2 = (int)(t2 * 255.0f);
-    int green2 = (int)((1.0f - t2) * 255.0f);
-    int blue2 = 255;
-    column2.color = (red2 << 16) | (green2 << 8) | blue2;
+    Rect column2 = {column_width, 0, canvas_width - column_width, canvas_height, calculate_color(cur_time, 1.5708f)};
     draw_rect(&frameArena, column2);
 }
