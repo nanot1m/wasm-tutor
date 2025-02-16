@@ -80,10 +80,9 @@ typedef struct
     int color;
 } Rect;
 
-void draw_rect(Arena *arena, Rect rect)
+Rect *Rect_create(Arena *arena)
 {
-    Rect *rect_ptr = (Rect *)push_size(arena, sizeof(Rect));
-    *rect_ptr = rect;
+    return (Rect *)push_size(arena, sizeof(Rect));
 }
 
 int calculate_color(int cur_time, float phase_shift)
@@ -103,9 +102,17 @@ void on_render(int canvas_width, int canvas_height, int cur_time)
     float t = (sinf(cur_time / 1000.0f) + 1.0f) / 2.0f;
     int column_width = clamp(canvas_width * t, 0, canvas_width);
 
-    Rect column1 = {0, 0, column_width, canvas_height, calculate_color(cur_time, 0)};
-    draw_rect(&frameArena, column1);
+    Rect *column1 = Rect_create(&frameArena);
+    column1->x = 0;
+    column1->y = 0;
+    column1->width = column_width;
+    column1->height = canvas_height;
+    column1->color = calculate_color(cur_time, 0);
 
-    Rect column2 = {column_width, 0, canvas_width - column_width, canvas_height, calculate_color(cur_time, 1.5708f)};
-    draw_rect(&frameArena, column2);
+    Rect *column2 = Rect_create(&frameArena);
+    column2->x = column_width;
+    column2->y = 0;
+    column2->width = canvas_width - column_width;
+    column2->height = canvas_height;
+    column2->color = calculate_color(cur_time, 1.5708f);
 }
