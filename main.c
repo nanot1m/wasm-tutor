@@ -1,19 +1,45 @@
-#define IMPORT(module, name) __attribute__((import_module(module), import_name(name)))
+// #define IMPORT(module, name) __attribute__((import_module(module), import_name(name)))
 
-IMPORT("env", "fill_rect")
-void fill_rect(int x, int y, int width, int height, int color);
+// IMPORT("env", "cosf")
+// float cosf(float x);
 
-IMPORT("env", "sinf")
-double sinf(double x);
+// IMPORT("env", "print_line")
+// double print_line(char *str);
 
-IMPORT("env", "cosf")
-double cosf(double x);
+float sinf(float x)
+{
+    const float A = -0.16666667f; // -1/3!
+    const float B = 0.00833333f;  //  1/5!
+    const float C = -0.00019841f; // -1/7!
 
-IMPORT("env", "print_line")
-double print_line(char *str);
+    const float PI = 3.1415927f;
+    const float TWO_PI = 6.2831855f;
+    const float INV_TWO_PI = 1.0f / TWO_PI;
 
-int layout[8];
-int column_colors[2] = {0xFF0000, 0x00FF00};
+    int k = (int)(x * INV_TWO_PI);
+    x -= k * TWO_PI;
+
+    if (x > PI)
+    {
+        x -= TWO_PI;
+    }
+    else if (x < -PI)
+    {
+        x += TWO_PI;
+    }
+
+    if (x > PI / 2)
+    {
+        x = PI - x;
+    }
+    else if (x < -PI / 2)
+    {
+        x = -PI - x;
+    }
+
+    float x2 = x * x;
+    return x * (1.0f + x2 * (A + x2 * (B + x2 * C)));
+}
 
 int clamp(int value, int min, int max)
 {
@@ -28,35 +54,63 @@ int clamp(int value, int min, int max)
     return value;
 }
 
-void on_render(int canvas_width, int canvas_height, int dt)
+typedef struct
 {
-    double t = (sinf(dt / 1000.0) + 1.0) / 2.0;
+    void *memory;
+    unsigned int offset;
+} Arena;
+
+Arena frameArena = {};
+
+void setup_frame_arena(void *memory)
+{
+    frameArena.memory = memory;
+}
+
+void *push_size(Arena *arena, unsigned int size)
+{
+    void *result = (char *)arena->memory + arena->offset;
+    arena->offset += size;
+    return result;
+}
+
+typedef struct
+{
+    int x;
+    int y;
+    int width;
+    int height;
+    int color;
+} Rect;
+
+void draw_rect(Arena *arena, Rect rect)
+{
+    Rect *rect_ptr = (Rect *)push_size(arena, sizeof(Rect));
+    *rect_ptr = rect;
+}
+
+void on_render(int canvas_width, int canvas_height, int cur_time)
+{
+    frameArena.offset = 0;
+
+    float t = (sinf(cur_time / 1000.0f) + 1.0f) / 2.0f;
     int column_width = clamp(canvas_width * t, 0, canvas_width);
 
-    layout[0] = 0;             // x position of first column
-    layout[1] = 0;             // y position of first column
-    layout[2] = column_width;  // width of first column
-    layout[3] = canvas_height; // height of first column
+    Rect column1 = {0, 0, column_width, canvas_height, 0};
+    float s1 = sinf(cur_time / 1000.0f);
+    float t1 = (s1 + 1.0f) / 2.0f;
+    int red1 = (int)((1.0f - t1) * 255.0f);
+    int green1 = (int)((1.0f - t1) * 255.0f);
+    int blue1 = (int)(t1 * 255.0f);
+    column1.color = (red1 << 16) | (green1 << 8) | blue1;
+    draw_rect(&frameArena, column1);
 
-    layout[4] = column_width;                // x position of second column
-    layout[5] = 0;                           // y position of second column
-    layout[6] = canvas_width - column_width; // width of second column
-    layout[7] = canvas_height;               // height of second column
-
-    double s1 = sinf(dt / 1000.0);
-    double t1 = (s1 + 1.0) / 2.0;
-    int red1 = (int)((1.0 - t1) * 255.0);
-    int green1 = (int)((1.0 - t1) * 255.0);
-    int blue1 = (int)(t1 * 255.0);
-    column_colors[0] = (red1 << 16) | (green1 << 8) | blue1;
-
-    double s2 = sinf((dt / 1000.0) + 1.5708);
-    double t2 = (s2 + 1.0) / 2.0;
-    int red2 = (int)(t2 * 255.0);
-    int green2 = (int)((1.0 - t2) * 255.0);
+    Rect column2 = {column_width, 0, canvas_width - column_width, canvas_height, 0};
+    float s2 = sinf((cur_time / 1000.0f) + 1.5708f);
+    float t2 = (s2 + 1.0f) / 2.0f;
+    int red2 = (int)(t2 * 255.0f);
+    int green2 = (int)((1.0f - t2) * 255.0f);
     int blue2 = 255;
-    column_colors[1] = (red2 << 16) | (green2 << 8) | blue2;
-
-    fill_rect(layout[0], layout[1], layout[2], layout[3], column_colors[0]);
-    fill_rect(layout[4], layout[5], layout[6], layout[7], column_colors[1]);
+    column2.color = (red2 << 16) | (green2 << 8) | blue2;
+    draw_rect(&frameArena, column2);
 }

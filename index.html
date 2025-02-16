@@ -8,42 +8,50 @@
   <body>
     <canvas id="layoutCanvas" width="600" height="320"></canvas>
     <script>
+      /** @type {HTMLCanvasElement} */
       const canvas = document.getElementById("layoutCanvas");
       const ctx = canvas.getContext("2d");
 
-      const memory = new WebAssembly.Memory({ initial: 256 });
+      const memory = new WebAssembly.Memory({ initial: 2 });
+
+      const textDecoder = new TextDecoder("utf-8");
 
       const importObject = {
-        env: {
-          memory,
-          fill_rect: (x, y, width, height, color) => {
-            ctx.fillStyle = "#" + color.toString(16).padStart(6, "0");
-            ctx.fillRect(x, y, width, height);
-          },
-          sinf: Math.sin,
-          cosf: Math.cos,
-          print_line: (ptr) => {
-            const buffer = new Uint8Array(memory.buffer);
-            let str = "";
-            for (let i = ptr; buffer[i] !== 0; i++) {
-              str += String.fromCharCode(buffer[i]);
-            }
-            console.log(str);
-          },
-        },
+        env: { memory },
       };
 
       WebAssembly.instantiateStreaming(fetch("./main.wasm"), importObject).then(
         ({ instance }) => {
           console.log("main.wasm loaded and instantiated");
-          const lib = instance.exports;
+          const wasm = instance.exports;
+          const buffer = new DataView(memory.buffer);
 
-          requestAnimationFrame(function draw(dt) {
+          const scratchSpaceAddress = wasm.__heap_base.value;
+          const frameArenaAddress = scratchSpaceAddress + 1024;
+          wasm.setup_frame_arena(frameArenaAddress);
+
+          const draw = (dt) => {
             // Clear the canvas
+            wasm.on_render(canvas.width, canvas.height, dt);
+
+            // Draw the frame buffer to the canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            lib.on_render(canvas.width, canvas.height, dt);
+
+            for (let i = 0; i < 2; i++) {
+              const address = frameArenaAddress + i * 20;
+              const x = buffer.getInt32(address, true);
+              const y = buffer.getInt32(address + 4, true);
+              const w = buffer.getInt32(address + 8, true);
+              const h = buffer.getInt32(address + 12, true);
+              const c = buffer.getInt32(address + 16, true);
+              ctx.fillStyle = `#${c.toString(16).padStart(6, "0")}`;
+              ctx.fillRect(x, y, w, h);
+            }
+
             requestAnimationFrame(draw);
-          });
+          };
+
+          requestAnimationFrame(draw);
         }
       );
     </script>
