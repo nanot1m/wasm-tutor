@@ -7,53 +7,66 @@
   </head>
   <body>
     <canvas id="layoutCanvas" width="600" height="320"></canvas>
-    <script>
+    <script type="module">
       /** @type {HTMLCanvasElement} */
       const canvas = document.getElementById("layoutCanvas");
       const ctx = canvas.getContext("2d");
 
+      // Create a memory object with 2 pages
+      // where 1 page is 64KB
+      // Minimum 2 pages are required for the wasm module
       const memory = new WebAssembly.Memory({ initial: 2 });
-
-      const textDecoder = new TextDecoder("utf-8");
 
       const importObject = {
         env: { memory },
       };
 
-      WebAssembly.instantiateStreaming(fetch("./main.wasm"), importObject).then(
-        ({ instance }) => {
-          console.log("main.wasm loaded and instantiated");
-          const wasm = instance.exports;
-          const buffer = new DataView(memory.buffer);
-
-          const scratchSpaceAddress = wasm.__heap_base.value;
-          const frameArenaAddress = scratchSpaceAddress + 1024;
-          wasm.setup_frame_arena(frameArenaAddress);
-
-          const draw = (dt) => {
-            // Clear the canvas
-            wasm.on_render(canvas.width, canvas.height, dt);
-
-            // Draw the frame buffer to the canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            for (let i = 0; i < 2; i++) {
-              const address = frameArenaAddress + i * 20;
-              const x = buffer.getInt32(address, true);
-              const y = buffer.getInt32(address + 4, true);
-              const w = buffer.getInt32(address + 8, true);
-              const h = buffer.getInt32(address + 12, true);
-              const c = buffer.getInt32(address + 16, true);
-              ctx.fillStyle = `#${c.toString(16).padStart(6, "0")}`;
-              ctx.fillRect(x, y, w, h);
-            }
-
-            requestAnimationFrame(draw);
-          };
-
-          requestAnimationFrame(draw);
-        }
+      const streamingInstance = await WebAssembly.instantiateStreaming(
+        fetch("./main.wasm"),
+        importObject
       );
+
+      const wasm = streamingInstance.instance.exports;
+
+      const buffer = new DataView(memory.buffer);
+
+      // heap_base is the address of the start of the heap
+      const heapBaseAddress = wasm.__heap_base.value;
+      // todo: figure out why this is necessary and how to do it properly
+      const frameArenaAddress = heapBaseAddress + 1024;
+      // Initialize the frame arena
+      wasm.setup_frame_arena(frameArenaAddress);
+
+      requestAnimationFrame(function draw(time) {
+        wasm.on_render(canvas.width, canvas.height, time);
+
+        ////// DRAW BEGIN
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // this code is specific to the frame buffer layout of the wasm module
+        // in main.c, the frame buffer is defined as an array of 2 rectangles
+        // where each rectangle is defined by 5 integers: x, y, w, h, c
+        // wasm is compiled into a 32-bit module, so the integers are 32-bit
+        // wasm always uses little-endian byte order
+        for (let i = 0; i < 2; i++) {
+          const address = frameArenaAddress + i * 20;
+          const x = buffer.getInt32(address, true);
+          const y = buffer.getInt32(address + 4, true);
+          const w = buffer.getInt32(address + 8, true);
+          const h = buffer.getInt32(address + 12, true);
+          const c = buffer.getInt32(address + 16, true);
+          const r = (c >> 16) & 0xff;
+          const g = (c >> 8) & 0xff;
+          const b = c & 0xff;
+          ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          ctx.fillRect(x, y, w, h);
+        }
+
+        ////// DRAW END
+
+        requestAnimationFrame(draw);
+      });
     </script>
   </body>
 </html>
